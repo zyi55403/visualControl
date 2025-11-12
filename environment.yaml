@@ -1,0 +1,22 @@
+name: visualControl
+dependencies:
+  - python=3.11.14  
+  - pip=25.3
+
+  - conda:
+      - matplotlib                3.10.7 
+      - scikit-learn              1.7.2
+  - pip:
+      - vosk                      0.3.45 
+      - pycaw                     20181226 
+      - pyautogui                 0.9.54 
+      - pyaudio                   0.2.14
+      - autopy                    4.0.1 
+      - pandas                    2.3.3 
+      - opencv-python             4.11.0.86 
+      - opencv-contrib-python     4.11.0.86
+      - mediapipe                 0.10.21   
+      - matplotlib                3.10.7
+      - cvzone                    1.6.1  
+      - comtypes                  1.4.13  
+      - numpy                     1.26.4
