@@ -39,12 +39,17 @@ class AIPaintingGUI:
         self.prev_draw_x = 0
         self.prev_draw_y = 0
 
-        # 定义工具区域
-        self.UNDO_AREA = (0, 480)
-        self.COLOR1_AREA = (480, 680)
-        self.COLOR2_AREA = (680, 880)
-        self.COLOR3_AREA = (880, 1080)
-        self.ERASER_AREA = (1080, 1280)
+        # 定义工具区域 (这些是基于原始1280px宽度的逻辑区域)
+        self.UNDO_AREA = (0, 400)
+        self.COLOR1_AREA = (400, 600)
+        self.COLOR2_AREA = (600, 840)
+        self.COLOR3_AREA = (840, 1040)
+        self.ERASER_AREA = (1040, 1280)
+
+        # 定义界面布局常量
+        self.TABLE_WIDTH = 480
+        self.HEADER_HEIGHT = 125
+        self.SCREEN_WIDTH = 1280
 
         # 创建GUI组件
         self.create_widgets()
@@ -54,7 +59,7 @@ class AIPaintingGUI:
         # 窗口关闭处理
         self.master.protocol("WM_DELETE_WINDOW", self.on_close)
 
-    #加载画笔图像资源
+    # 加载画笔图像资源
     def load_pen_images(self):
         overlayList = []
         myList = os.listdir(self.folderPath)
@@ -62,7 +67,8 @@ class AIPaintingGUI:
             image = cv2.imread(f'{self.folderPath}/{imPath}')
             overlayList.append(image)
         return overlayList
-    #创建GUI界面组件
+
+    # 创建GUI界面组件
     def create_widgets(self):
         self.video_label = tk.Label(self.master)
         self.video_label.pack()
@@ -100,26 +106,39 @@ class AIPaintingGUI:
                 self.xp, self.yp = 0, 0
                 cv2.rectangle(img, (x1, y1 - 25), (x2, y2 + 25), self.drawColor, cv2.FILLED)
 
-                if y1 < 125:
-                    if self.UNDO_AREA[0] < x1 < self.UNDO_AREA[1]:
+                if y1 < self.HEADER_HEIGHT:
+                    # 因为工具栏被挤压显示在 [480, 1280] 的区域，
+                    # 我们需要将手在该区域的物理x坐标(x1)映射回原始的 [0, 1280] 逻辑坐标(logical_x1)
+                    logical_x1 = -1  # 默认值，表示不在有效区域
+                    if x1 > self.TABLE_WIDTH:
+                        # 计算手在被挤压的工具栏中的相对位置 (0 to 800)
+                        pos_in_squeezed_header = x1 - self.TABLE_WIDTH
+                        # 计算被挤压后的工具栏宽度
+                        squeezed_width = self.SCREEN_WIDTH - self.TABLE_WIDTH
+                        # 按比例换算回原始1280宽度下的坐标
+                        logical_x1 = (pos_in_squeezed_header / squeezed_width) * self.SCREEN_WIDTH
+
+                    # 使用转换后的 logical_x1 进行判断
+                    if self.UNDO_AREA[0] < logical_x1 < self.UNDO_AREA[1]:
                         self.imgCanvas = self.lastCanvas.copy()
                         cv2.putText(img, "Undo Last Stroke", (50, 360),
                                     cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 3)
-                    elif self.COLOR1_AREA[0] < x1 < self.COLOR1_AREA[1]:
+                    elif self.COLOR1_AREA[0] < logical_x1 < self.COLOR1_AREA[1]:
                         self.header = cv2.resize(self.overlayList[0], (1280, 125))
                         self.drawColor = (255, 0, 255)
-                    elif self.COLOR2_AREA[0] < x1 < self.COLOR2_AREA[1]:
+                    elif self.COLOR2_AREA[0] < logical_x1 < self.COLOR2_AREA[1]:
                         self.header = cv2.resize(self.overlayList[1], (1280, 125))
                         self.drawColor = (255, 50, 50)
-                    elif self.COLOR3_AREA[0] < x1 < self.COLOR3_AREA[1]:
+                    elif self.COLOR3_AREA[0] < logical_x1 < self.COLOR3_AREA[1]:
                         self.header = cv2.resize(self.overlayList[2], (1280, 125))
                         self.drawColor = (0, 255, 0)
-                    elif self.ERASER_AREA[0] < x1 < self.ERASER_AREA[1]:
+                    elif self.ERASER_AREA[0] < logical_x1 < self.ERASER_AREA[1]:
                         self.header = cv2.resize(self.overlayList[3], (1280, 125))
                         self.drawColor = (0, 0, 0)
 
             # 绘画模式
             if fingers[1] and not fingers[2]:
+                # ... (绘画模式代码无需修改)
                 if self.xp == 0 and self.yp == 0:
                     self.lastCanvas = self.imgCanvas.copy()
                     self.prev_draw_x = x1
@@ -157,21 +176,30 @@ class AIPaintingGUI:
         img = cv2.bitwise_and(img, imgInv)
         img = cv2.bitwise_or(img, self.imgCanvas)
 
-        # 添加界面元素
-        img[0:125, 0:1280] = self.header
+        # --- 界面元素绘制 ---
+        # 1. 优先绘制左上角的波形图（表格）
+        table_height = 360
+        if processed_img is not None:
+            plot_img = processed_img[:, 640:1280, :]
+            plot_img = cv2.resize(plot_img, (self.TABLE_WIDTH, table_height))
+            img[0:table_height, 0:self.TABLE_WIDTH] = plot_img
+
+        # 2. 将原始 header 图像“挤压”到新的宽度
+        new_header_width = self.SCREEN_WIDTH - self.TABLE_WIDTH  # 1280 - 480 = 800
+        squeezed_header = cv2.resize(self.header, (new_header_width, self.HEADER_HEIGHT))
+
+        # 3. 将“挤压”后的工具栏图像放置在表格右侧
+        img[0:self.HEADER_HEIGHT, self.TABLE_WIDTH:self.SCREEN_WIDTH] = squeezed_header
+
+        # 在其他位置添加文字信息
         cv2.putText(img, f'Blinks: {current_blinks}', (500, 200),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         current_threshold = self.blink_detector.blink_threshold
         cv2.putText(img, f'Threshold: {current_threshold:.1f}', (500, 240),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-        # 添加波形图
-        if processed_img is not None:
-            plot_img = processed_img[:, 640:1280, :]
-            plot_img = cv2.resize(plot_img, (480, 360))
-            img[0:360, 0:480] = plot_img
 
         return img
-    #定时更新视频帧
+
     def update_frame(self):
         if not self.running:
             return
@@ -185,7 +213,6 @@ class AIPaintingGUI:
 
             self.video_label.imgtk = imgtk
             self.video_label.configure(image=imgtk)
-        #15ms后再次调用自身实现循环
         self.master.after(15, self.update_frame)
 
     def on_close(self):
@@ -193,3 +220,10 @@ class AIPaintingGUI:
         if self.cap.isOpened():
             self.cap.release()
         self.master.destroy()
+
+
+# 如果你想直接运行这个文件进行测试，可以添加以下代码
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = AIPaintingGUI(root)
+    root.mainloop()

@@ -448,11 +448,11 @@ class GestureControlGUI:
             self.log_message("动作: 下一页 ")
             print("动作: 下一页 ")
         elif action == "left":
-            pg.press('up')
+            pg.press('left')
             self.log_message("动作: 上一首 ")
             print("动作: 上一首 ")
         elif action == "right":
-            pg.press('down')
+            pg.press('right')
             self.log_message("动作: 下一首 ")
             print("动作: 下一首 ")
         elif action == "space":
